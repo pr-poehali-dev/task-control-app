@@ -1,0 +1,29 @@
+{
+  "tests": [
+    {
+      "name": "Get all tasks",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": [],
+      "bodyMatcher": "type"
+    },
+    {
+      "name": "Create new task",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "title": "Test task",
+        "deadline": "2025-12-31T23:59:59",
+        "assigneeId": null
+      },
+      "expectedStatus": 201,
+      "expectedBody": {
+        "id": "string",
+        "title": "Test task",
+        "completed": false
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

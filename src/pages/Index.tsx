@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ interface Task {
   title: string;
   deadline: Date | null;
   assignee: string;
+  assigneeId?: string;
   completed: boolean;
 }
 
@@ -24,36 +25,13 @@ interface TeamMember {
   color: string;
 }
 
-const Index = () => {
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: "1",
-      title: "Подготовить презентацию для клиента",
-      deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-      assignee: "Анна Петрова",
-      completed: false,
-    },
-    {
-      id: "2",
-      title: "Провести код-ревью PR #234",
-      deadline: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000),
-      assignee: "Иван Сидоров",
-      completed: false,
-    },
-    {
-      id: "3",
-      title: "Обновить документацию API",
-      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      assignee: "Мария Иванова",
-      completed: false,
-    },
-  ]);
+const API_TASKS = "https://functions.poehali.dev/7ff6e31c-46cc-4c80-acd5-0ebc96a69c4b";
+const API_TEAM = "https://functions.poehali.dev/798a089b-fe7c-4c7b-b48a-85921ec6f6e9";
 
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
-    { id: "1", name: "Анна Петрова", color: "#2563EB" },
-    { id: "2", name: "Иван Сидоров", color: "#1E4798" },
-    { id: "3", name: "Мария Иванова", color: "#64748B" },
-  ]);
+const Index = () => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDeadline, setNewTaskDeadline] = useState("");
@@ -64,6 +42,48 @@ const Index = () => {
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   
   const [taskFilter, setTaskFilter] = useState<"all" | "active" | "completed">("all");
+
+  const fetchTasks = async () => {
+    try {
+      const response = await fetch(API_TASKS);
+      const data = await response.json();
+      const tasksWithDates = data.map((task: any) => ({
+        ...task,
+        deadline: task.deadline ? new Date(task.deadline) : null,
+      }));
+      setTasks(tasksWithDates);
+    } catch (error) {
+      console.error('Ошибка загрузки задач:', error);
+      toast.error('Не удалось загрузить задачи');
+    }
+  };
+
+  const fetchTeamMembers = async () => {
+    try {
+      const response = await fetch(API_TEAM);
+      const data = await response.json();
+      setTeamMembers(data);
+    } catch (error) {
+      console.error('Ошибка загрузки участников:', error);
+      toast.error('Не удалось загрузить участников');
+    }
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      await Promise.all([fetchTasks(), fetchTeamMembers()]);
+      setIsLoading(false);
+    };
+    loadData();
+
+    const interval = setInterval(() => {
+      fetchTasks();
+      fetchTeamMembers();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const calculateTimeLeft = (deadline: Date | null) => {
     if (!deadline) return null;
@@ -81,30 +101,65 @@ const Index = () => {
     return { days, hours, minutes, expired: false };
   };
 
-  const addTask = () => {
+  const addTask = async () => {
     if (!newTaskTitle.trim()) {
       toast.error("Введите название задачи");
       return;
     }
 
-    const newTask: Task = {
-      id: Date.now().toString(),
-      title: newTaskTitle,
-      deadline: newTaskDeadline ? new Date(newTaskDeadline) : null,
-      assignee: newTaskAssignee || "Не назначено",
-      completed: false,
-    };
+    const selectedMember = teamMembers.find(m => m.name === newTaskAssignee);
 
-    setTasks([...tasks, newTask]);
-    setNewTaskTitle("");
-    setNewTaskDeadline("");
-    setNewTaskAssignee("");
-    setIsAddTaskOpen(false);
-    toast.success("Задача добавлена");
+    try {
+      const response = await fetch(API_TASKS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newTaskTitle,
+          deadline: newTaskDeadline || null,
+          assigneeId: selectedMember?.id || null,
+        }),
+      });
+
+      if (response.ok) {
+        setNewTaskTitle("");
+        setNewTaskDeadline("");
+        setNewTaskAssignee("");
+        setIsAddTaskOpen(false);
+        toast.success("Задача добавлена");
+        await fetchTasks();
+      } else {
+        toast.error("Ошибка при добавлении задачи");
+      }
+    } catch (error) {
+      console.error('Ошибка:', error);
+      toast.error("Ошибка при добавлении задачи");
+    }
   };
 
-  const toggleTaskComplete = (id: string) => {
-    setTasks(tasks.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task)));
+  const toggleTaskComplete = async (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+
+    try {
+      const response = await fetch(API_TASKS, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: id,
+          completed: !task.completed,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success(task.completed ? "Задача снова активна" : "Задача выполнена");
+        await fetchTasks();
+      } else {
+        toast.error("Ошибка при обновлении задачи");
+      }
+    } catch (error) {
+      console.error('Ошибка:', error);
+      toast.error("Ошибка при обновлении задачи");
+    }
   };
 
   const deleteTask = (id: string) => {
@@ -112,28 +167,35 @@ const Index = () => {
     toast.success("Задача удалена");
   };
 
-  const addTeamMember = () => {
+  const addTeamMember = async () => {
     if (!newMemberName.trim()) {
       toast.error("Введите имя участника");
       return;
     }
 
-    const colors = ["#2563EB", "#1E4798", "#64748B", "#8B5CF6", "#0EA5E9"];
-    const newMember: TeamMember = {
-      id: Date.now().toString(),
-      name: newMemberName,
-      color: colors[Math.floor(Math.random() * colors.length)],
-    };
+    try {
+      const response = await fetch(API_TEAM, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newMemberName }),
+      });
 
-    setTeamMembers([...teamMembers, newMember]);
-    setNewMemberName("");
-    setIsAddMemberOpen(false);
-    toast.success("Участник добавлен");
+      if (response.ok) {
+        setNewMemberName("");
+        setIsAddMemberOpen(false);
+        toast.success("Участник добавлен");
+        await fetchTeamMembers();
+      } else {
+        toast.error("Ошибка при добавлении участника");
+      }
+    } catch (error) {
+      console.error('Ошибка:', error);
+      toast.error("Ошибка при добавлении участника");
+    }
   };
 
   const removeMember = (id: string) => {
-    setTeamMembers(teamMembers.filter((member) => member.id !== id));
-    toast.success("Участник удален");
+    toast.info("Удаление участников временно отключено");
   };
 
   const filteredTasks = tasks.filter((task) => {
