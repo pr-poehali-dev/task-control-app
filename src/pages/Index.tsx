@@ -62,6 +62,8 @@ const Index = () => {
 
   const [newMemberName, setNewMemberName] = useState("");
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  
+  const [taskFilter, setTaskFilter] = useState<"all" | "active" | "completed">("all");
 
   const calculateTimeLeft = (deadline: Date | null) => {
     if (!deadline) return null;
@@ -134,6 +136,12 @@ const Index = () => {
     toast.success("Участник удален");
   };
 
+  const filteredTasks = tasks.filter((task) => {
+    if (taskFilter === "active") return !task.completed;
+    if (taskFilter === "completed") return task.completed;
+    return true;
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container max-w-6xl mx-auto py-8 px-4">
@@ -155,10 +163,39 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="tasks" className="space-y-4">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <Icon name="ListTodo" className="w-6 h-6 text-primary" />
-                <h2 className="text-2xl font-semibold">Активные задачи</h2>
+                <h2 className="text-2xl font-semibold">Задачи</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={taskFilter === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTaskFilter("all")}
+                  className="gap-1.5"
+                >
+                  <Icon name="List" className="w-4 h-4" />
+                  Все ({tasks.length})
+                </Button>
+                <Button
+                  variant={taskFilter === "active" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTaskFilter("active")}
+                  className="gap-1.5"
+                >
+                  <Icon name="Circle" className="w-4 h-4" />
+                  Активные ({tasks.filter(t => !t.completed).length})
+                </Button>
+                <Button
+                  variant={taskFilter === "completed" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTaskFilter("completed")}
+                  className="gap-1.5"
+                >
+                  <Icon name="CheckCircle2" className="w-4 h-4" />
+                  Завершенные ({tasks.filter(t => t.completed).length})
+                </Button>
               </div>
               <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
                 <DialogTrigger asChild>
@@ -215,15 +252,19 @@ const Index = () => {
             </div>
 
             <div className="grid gap-4">
-              {tasks.length === 0 ? (
+              {filteredTasks.length === 0 ? (
                 <Card className="border-dashed">
                   <CardContent className="flex flex-col items-center justify-center py-12">
                     <Icon name="Inbox" className="w-12 h-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Нет активных задач</p>
+                    <p className="text-muted-foreground">
+                      {taskFilter === "active" && "Нет активных задач"}
+                      {taskFilter === "completed" && "Нет завершенных задач"}
+                      {taskFilter === "all" && "Нет задач"}
+                    </p>
                   </CardContent>
                 </Card>
               ) : (
-                tasks.map((task) => {
+                filteredTasks.map((task) => {
                   const timeLeft = calculateTimeLeft(task.deadline);
                   const member = teamMembers.find((m) => m.name === task.assignee);
 
